@@ -1,0 +1,812 @@
+---
+title: "DNAm Smoking Exposure Signature"
+author: "Lauren Vanderlinden"
+date: "Report generated: `r paste(format(Sys.Date(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r, include=FALSE}
+rm(list=ls())
+library(kableExtra)
+library(table1)
+library(ggplot2)
+library(DT)
+library(ggpubr)
+library(sjstats)
+library(nlme)
+library(lme4)
+library(blandr)
+library(ggforestplot)
+library(ggbiplot)
+source("C:/Users/vanderll/Documents/codingExamples/addPvalsToTable1.R")
+```
+
+# Overview
+
+Made 2 different DNAm smoking signatures based on Reese 2017 (https://pubmed.ncbi.nlm.nih.gov/27323799/) and on McCartney 2018 (https://pubmed.ncbi.nlm.nih.gov/30257690/).
+
+Made these scores on EVERY SAMPLE that has DNAm.  Then depending on the analyses, folks can subset and/or dichotomize as needed.  Just a reminder in the full datasets we have 687 samples on the 450K and 475 samples on the EPIC.  Note: this includes technical replicates. When removing technical replicates, we have a total of **641** on 450K and **475** on EPIC (**1116** samples total).  These 1,116 is what is used for the following analyses.   
+
+# Correlation 
+
+Let's first compare the McCartney and Reese scores.  
+
+```{r, fig.width=5.5, fig.height=4.5}
+
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/bothSmokingSignatures.Rdata")
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/ML_smokeScore.Rdata")
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/dataRaw/pheno.forMadj.platformAdj.Rdata")
+
+both.smokes2 = merge(both.smokes, ML_smokeScores, by.x="array", by.y="samples")
+
+both.smokes2.wP = merge(both.smokes2, pheno.want, by="array")
+
+#### Make a heatmap of the correlations of the signatures 
+cormat <- round(cor(both.smokes2[,c(3,4,6)]),2)
+cormat.CB <- round(cor(both.smokes2.wP[which(both.smokes2.wP$Visit_Type=="CWB"),c(3,4,6)]),2)
+
+both.smokes.last <- both.smokes2.wP[order(both.smokes2.wP$ID, both.smokes2.wP$clinage, decreasing=TRUE),]
+both.smokes.last <- both.smokes.last[!duplicated(both.smokes.last$ID),]
+
+cormat.last <- round(cor(both.smokes.last[,c(3,4,6)]),2)
+
+cormat.10plus <- round(cor(both.smokes2.wP[which(both.smokes2.wP$clinage>10),c(3,4,6)]),2)
+
+#head(cormat)
+
+colnames(cormat) = c("McCartney", "Reese", "Rauschert")
+rownames(cormat)= c("McCartney", "Reese", "Rauschert")
+
+colnames(cormat.10plus) = c("McCartney", "Reese", "Rauschert")
+rownames(cormat.10plus)= c("McCartney", "Reese", "Rauschert")
+
+
+colnames(cormat.CB) = c("McCartney", "Reese", "Rauschert")
+rownames(cormat.CB)= c("McCartney", "Reese", "Rauschert")
+
+colnames(cormat.last) = c("McCartney", "Reese", "Rauschert")
+rownames(cormat.last)= c("McCartney", "Reese", "Rauschert")
+
+library(reshape2)
+
+
+melted_cormat <- melt(cormat)
+# Get upper triangle of the correlation matrix
+  get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+  }
+
+upper_tri <- get_upper_tri(cormat)
+melted_cormat <- melt(upper_tri, na.rm = TRUE)
+
+upper_tri.CB <- get_upper_tri(cormat.CB)
+melted_cormat.CB <- melt(upper_tri.CB, na.rm = TRUE)
+
+
+upper_tri.last <- get_upper_tri(cormat.last)
+melted_cormat.last <- melt(upper_tri.last, na.rm = TRUE)
+
+upper_tri.10plus <- get_upper_tri(cormat.10plus)
+melted_cormat.10plus <- melt(upper_tri.10plus, na.rm = TRUE)
+
+# Heatmap
+library(ggplot2)
+
+#melted_cormat.all = rbind(melted_cormat, melted_cormat.CB, melted_cormat.last)
+ggheatmap <- ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0.5, limit = c(0,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 0, vjust = 5, size = 9, hjust = 0.5))+
+ coord_fixed()
+ggheatmap.CB <- ggplot(data = melted_cormat.CB, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0.5, limit = c(0,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 0, vjust = 5, size = 9, hjust = 0.5))+
+ coord_fixed()
+ggheatmap.10plus <- ggplot(data = melted_cormat.10plus, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0.5, limit = c(0,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_minimal()+ 
+ theme(axis.text.x = element_text(angle = 0, vjust = 5, size = 9, hjust = 0.5))+
+ coord_fixed()
+
+legend.only <- cowplot::get_legend(ggheatmap+theme_bw()+theme(legend.direction = "horizontal"))
+
+
+corHeat.10plus <- ggheatmap.10plus + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  legend.position="none",
+  axis.ticks = element_blank())
+
+corHeat <- ggheatmap + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  legend.position="none",
+  axis.ticks = element_blank())
+
+corHeat.CB <- ggheatmap.CB + 
+geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  legend.position="none",
+  axis.ticks = element_blank())
+
+library(ggpubr)
+ggarrange(corHeat, corHeat.CB, corHeat.10plus, ncol=3, widths =c(1,1,1), heights=c(1),labels=c("A. All samples", "B. Cord blood only", "C. Samples 10+ years", ""))
+
+plot(legend.only)
+
+
+##### What about distribution plots? #####
+# get overlap histogram plots #
+
+
+
+
+forHist = data.frame(signature = c(both.smokes2$DNAm.smoke.McCartney, both.smokes2$DNAm.smoke.Reese, both.smokes2$normalized_smokeScore), study = c(rep("McCartney", nrow(both.smokes2)), rep("Reese", nrow(both.smokes2)), rep("Rauschert", nrow(both.smokes2))))
+forHist$study = factor(forHist$study, levels=c("McCartney", "Reese", "Rauschert"))
+  
+ggplot(forHist, aes(x=signature, fill=study)) +
+    geom_histogram(color= "darkgray", alpha=0.6, position = 'identity', bins=100) +
+    scale_fill_manual(values=c("#69b3a2", "#404080", "#D6604D")) +
+  theme_bw()+
+  theme(legend.position = c(0.1,0.78), axis.title=element_text(size=14,face="bold"), 
+        plot.title = element_text(size=22,face="bold"))+
+    xlab("Smoking Signature Score")+
+    labs(title="Distributions of Smoking Signatures in DAISY")
+    
+
+
+#### scatter plots to show correlation
+ggplot(both.smokes, aes(x = DNAm.smoke.Reese, y = DNAm.smoke.McCartney, color = platform)) +
+  geom_point(alpha=0.7)+
+  scale_color_manual(values=c("blue", "black"))+
+  scale_fill_manual(values=c("blue", "black")) +
+  #geom_smooth(method = "lm", se = FALSE) +
+  theme_bw()+
+  theme(legend.position = "bottom")
+
+
+cor.both = cor.test(x=both.smokes$DNAm.smoke.Reese, y = both.smokes$DNAm.smoke.McCartney)
+cor.both.spearman = cor.test(x=both.smokes$DNAm.smoke.Reese, y = both.smokes$DNAm.smoke.McCartney, method="spearman")
+
+
+cor.450 = cor.test(x=both.smokes$DNAm.smoke.Reese[which(both.smokes$platform=="450K")], y = both.smokes$DNAm.smoke.McCartney[which(both.smokes$platform=="450K")])
+cor.EPIC = cor.test(x=both.smokes$DNAm.smoke.Reese[which(both.smokes$platform=="EPIC")], y = both.smokes$DNAm.smoke.McCartney[which(both.smokes$platform=="EPIC")])
+
+toPrint = data.frame(data = c("Both Platforms", "450K", "EPIC"), correlation = round(c(cor.both$estimate, cor.450$estimate, cor.EPIC$estimate), 3), pvalue = formatC(c(cor.both$p.value, cor.450$p.value, cor.EPIC$p.value), format="e", digits=2))
+colnames(toPrint) = c("Data", "Correlation Coefficient", "p-value")
+
+kable(toPrint, row.names=0, align='l')  %>%
+ kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+# ICC 
+
+Look at the intra-class coefficient.  This looks at how strongly the smoking signature score in the same subject resemble each other. I'm using the clinical age as time.  
+
+linear mixed model used:
+
+$$
+DNAm Smoking Signature =  Age + Platform + random(Age|ID) 
+$$
+The adjusted ICC only relates to the random effects, the unadjusted ICC also takes the fixed effects variances into account, more precisely, the fixed effects variance is added to the denominator of the formula to calculate the ICC.  I'm going to report both.   
+
+```{r, fig.width=4, fig.height=3}
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/dataRaw/pheno.forMadj.platformAdj.Rdata")
+smoke.wPheno = merge(both.smokes, pheno.want, by="array")
+smoke.wPheno2 = merge(both.smokes2, pheno.want, by="array")
+
+smoke.wPheno.noTR = smoke.wPheno[!duplicated(smoke.wPheno$samplekey),]
+
+McCartney.mixMod <- lme(scale(DNAm.smoke.McCartney) ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID)
+Reese.mixMod <- lme(scale(DNAm.smoke.Reese) ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID )
+Rauschert.mixMod <- lme(scale(normalized_smokeScore) ~ clinage + platform, data=smoke.wPheno2, random = ~clinage | ID)
+#McCartney.mixMod <- lme(DNAm.smoke.McCartney ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ 1 | ID)
+#Reese.mixMod <- lme(DNAm.smoke.Reese ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ 1 | ID )
+
+#smoke.wPheno.noTR$CBsample = smoke.wPheno.noTR$Visit_Type=="CWB"
+#McCartney.mixMod <- lme(DNAm.smoke.McCartney ~ CBsample + clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID)
+#Reese.mixMod <- lme(DNAm.smoke.Reese ~ CBsample + clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID)
+
+set.seed(123)
+#mccartney.icc = performance::icc(McCartney.mixMod, ci=TRUE)
+mccartney.icc = performance::icc(McCartney.mixMod, ci=NULL)
+
+set.seed(123)
+#reese.icc = performance::icc(Reese.mixMod, ci=TRUE, tolerance=1e-2)
+reese.icc = performance::icc(Reese.mixMod, ci=NULL, tolerance=1e-2)
+
+#reese.icc = performance::icc(Reese.mixMod, ci=TRUE, tolerance=1e-07)
+
+set.seed(123)
+rauschert.icc = performance::icc(Rauschert.mixMod, ci=NULL)
+#rauschert.icc = performance::icc(Rauschert.mixMod, ci=TRUE, tolerance=1e-2)
+
+icc.print = data.frame(signature = c("McCartney", "Reese", "Rauschert"), Adjusted.ICC = round(c(mccartney.icc$ICC_adjusted, reese.icc$ICC_adjusted, rauschert.icc$ICC_adjusted),2), Unadjusted.ICC =  round(c(mccartney.icc$ICC_unadjusted, reese.icc$ICC_unadjusted, rauschert.icc$ICC_unadjusted),2))
+
+#performance::check_singularity(Reese.mixMod, tolerance = 2.5)
+
+
+kable(icc.print, row.names=0, align='l')  %>%
+ kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+Wow!  Reese has a much higher ICC.  **To-do** get 95% CI intervals around the ICC estimates, but need to do bootstraps and this will take awhile to run.  
+
+What is also interesting is that in the mixed models, platform is extremely significant in the McCartney signature score, while Reese is not.  
+
+**McCartney Fixed Effects Table from Mixed Model** 
+
+```{r, fig.width=8, fig.height=5, hide=FALSE}
+summary(McCartney.mixMod)$tTable
+```
+
+
+**Reese Fixed Effects Table from Mixed Model** 
+
+```{r, fig.width=8, fig.height=5, hide=FALSE}
+summary(Reese.mixMod)$tTable
+```
+
+
+**Rauschert Fixed Effects Table from Mixed Model** 
+
+```{r, fig.width=8, fig.height=5, hide=FALSE}
+summary(Rauschert.mixMod)$tTable
+```
+
+Maybe the reasoning why platform matters a lot in McCartney is it uses more probes? 
+
+# Visualization
+
+Going to look at our visit time classifications (CB, EV, PreSV, SV, and preT1D).  
+
+**Box Plots**
+
+
+```{r, fig.width=5.5, fig.height=4, hide=FALSE}
+smoke.wPheno.noTR$IAgroup2[which(smoke.wPheno.noTR$IAgroup2=="")]="control"
+ggplot(smoke.wPheno.noTR, aes(x=Visit_Type, y=DNAm.smoke.McCartney, fill=IAgroup2)) + 
+    geom_boxplot() + 
+   scale_fill_manual(values=c("red4", "#999999"))+
+  theme_bw()+
+  ylab("DNAm Smoking Signature")+
+  ggtitle("McCartney")+
+  theme(legend.position = "bottom")
+
+
+ggplot(smoke.wPheno.noTR, aes(x=Visit_Type, y=DNAm.smoke.Reese, fill=IAgroup2)) + 
+    geom_boxplot() + 
+   scale_fill_manual(values=c("red4", "#999999"))+
+  theme_bw()+
+  ylab("DNAm Smoking Signature")+
+  ggtitle("Reese")+
+  theme(legend.position = "bottom")
+```
+
+**Spaghetti Plots**
+
+
+```{r, fig.width=5.5, fig.height=4, hide=FALSE}
+McCartney.s <- ggplot(smoke.wPheno.noTR, aes(x=clinage, y=DNAm.smoke.McCartney, group = ID)) + 
+    geom_line(color="#69b3a2", alpha=0.6) + 
+   scale_fill_manual(values=c("#69b3a2"))+
+   scale_colour_manual(values=c("#69b3a2"))+
+  geom_smooth(aes(group = 1), method="loess", formula=y~x, se=FALSE)+
+    theme_bw()+
+  ylab("Score")+
+  ggtitle("McCartney")+
+  xlab("Age (years)")+
+  theme(legend.position = "none")
+
+Reese.s <- ggplot(smoke.wPheno.noTR, aes(x=clinage, y=DNAm.smoke.Reese, group = ID)) + 
+    geom_line(aes(color="#404080", alpha=0.6)) + 
+   scale_fill_manual(values=c("#404080"))+
+   scale_colour_manual(values=c("#404080"))+
+  geom_smooth(aes(group = 1), method="loess", formula=y~x, se=FALSE)+
+    theme_bw()+
+  ylab("Score")+
+  ggtitle("Reese")+
+  xlab("")+
+  theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank() )
+
+Rauschert.s <- ggplot(smoke.wPheno2, aes(x=clinage, y=normalized_smokeScore, group = ID)) + 
+  geom_line(aes(color="#D6604D", alpha=0.6)) + 
+   scale_fill_manual(values=c("#D6604D"))+
+   scale_colour_manual(values=c("#D6604D"))+
+  geom_smooth(aes(group = 1), method="loess", formula=y~x, se=FALSE)+
+    theme_bw()+
+  ylab("Score")+
+  ggtitle("Rauschert")+
+  xlab("")+
+  theme(legend.position = "none", axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.title.x = element_blank() )
+
+#McCartney.s
+#Reese.s
+#Rauschert.s
+ggarrange(Rauschert.s, Reese.s, McCartney.s, ncol=1, widths=6, heights=c(12, 12, 14))
+
+```
+
+**Bland-Altman Plots**
+
+Here, lets look at the difference from those with cord blood only.  We can also expand to the those without cord blood and instead of having the cord blood as the reference, we can plot the mean of samples.  
+
+```{r, fig.width=5.5, fig.height=4, hide=FALSE}
+#first we need to get the data in the right format. A dataframe with "method 1", "method 2")
+
+CB = smoke.wPheno2[which(smoke.wPheno2$Visit_Type=="CWB"),]
+notCB = smoke.wPheno2[-which(smoke.wPheno2$Visit_Type=="CWB"),]
+
+CB.2 = CB[,c(10, 16, 2, 3, 4, 6)]
+notCB.2 = notCB[,c(10, 2,3,4,6,18)]
+
+colnames(CB.2) = c("ID", "sex", "platform.CB", "McCartney_CB", "Reese_CB", "Rauschert_CB")
+colnames(notCB.2) = c("ID", "platform.notCB", "McCartney_notCB", "Reese_notCB", "Rauschert_notCB", "age")
+
+forBA = merge(CB.2, notCB.2, by="ID")
+BAstats_Reese = blandr.statistics(forBA$Reese_CB, forBA$Reese_notCB)
+BAstats_McCartney = blandr.statistics(forBA$McCartney_CB, forBA$McCartney_notCB)
+
+
+forBA$Reese_diff = forBA$Reese_CB - forBA$Reese_notCB
+forBA$McCartney_diff = forBA$McCartney_CB - forBA$McCartney_notCB
+
+Reese_biasInfo = paste0("bias ", round(BAstats_Reese$bias, 2), " (", round(BAstats_Reese$biasLowerCI, 2), ", ", round(BAstats_Reese$biasUpperCI, 2), ")") 
+McCartney_biasInfo = paste0("bias ", round(BAstats_McCartney$bias, 2), " (", round(BAstats_McCartney$biasLowerCI, 2), ", ", round(BAstats_McCartney$biasUpperCI, 2), ")") 
+
+
+blandr.plot.ggplot(BAstats_Reese) + 
+  labs(title="Reese", subtitle = Reese_biasInfo)+
+  theme_bw()
+
+blandr.plot.ggplot(BAstats_McCartney)+ 
+  labs(title="McCartney", subtitle = McCartney_biasInfo)+
+  theme_bw()
+
+```
+
+Okay, so these are surprising results.  With the ICC you would think the Reese would be more tight.  Maybe we need to look at the bland altman on standardized scores (i.e. z-score).  The distribution is different between the 2, so lets do the above process again, but this time with the z-scores of each smoking signature.  Maybe more comparable. 
+
+
+
+```{r, fig.width=5.5, fig.height=4, hide=FALSE, warning=FALSE}
+#first we need to get the data in the right format. A dataframe with "method 1", "method 2")
+smoke.wPheno2$Reese_zscore = scale(smoke.wPheno2$DNAm.smoke.Reese)
+smoke.wPheno2$McCartney_zscore = scale(smoke.wPheno2$DNAm.smoke.McCartney)
+smoke.wPheno2$Rauschert_zscore = scale(smoke.wPheno2$normalized_smokeScore)
+
+
+CB = smoke.wPheno2[which(smoke.wPheno2$Visit_Type=="CWB"),]
+notCB = smoke.wPheno2[-which(smoke.wPheno2$Visit_Type=="CWB"),]
+
+CB.2 = CB[,c(10, 16, 2, 26, 25, 27)]
+notCB.2 = notCB[,c(10, 2,26,25, 27,18)]
+
+colnames(CB.2) = c("ID", "sex", "platform.CB", "McCartney_CB", "Reese_CB", "Rauschert_CB")
+colnames(notCB.2) = c("ID", "platform.notCB", "McCartney_notCB", "Reese_notCB", "Rauschert_notCB", "age")
+
+forBA = merge(CB.2, notCB.2, by="ID")
+BAstats_Reese = blandr.statistics(forBA$Reese_CB, forBA$Reese_notCB)
+BAstats_McCartney = blandr.statistics(forBA$McCartney_CB, forBA$McCartney_notCB)
+BAstats_Rauschert = blandr.statistics(forBA$Rauschert_CB, forBA$Rauschert_notCB)
+
+forBA$Reese_diff = forBA$Reese_CB - forBA$Reese_notCB
+forBA$McCartney_diff = forBA$McCartney_CB - forBA$McCartney_notCB
+forBA$Rauschert_diff = forBA$Rauschert_CB - forBA$Rauschert_notCB
+
+
+Reese_biasInfo = paste0("bias ", round(BAstats_Reese$bias, 2), " (", round(BAstats_Reese$biasLowerCI, 2), ", ", round(BAstats_Reese$biasUpperCI, 2), ")") 
+McCartney_biasInfo = paste0("bias ", round(BAstats_McCartney$bias, 2), " (", round(BAstats_McCartney$biasLowerCI, 2), ", ", round(BAstats_McCartney$biasUpperCI, 2), ")") 
+
+Rauschert_biasInfo = paste0("bias ", round(BAstats_Rauschert$bias, 2), " (", round(BAstats_Rauschert$biasLowerCI, 2), ", ", round(BAstats_Rauschert$biasUpperCI, 2), ")") 
+
+blandr.plot.ggplot(BAstats_Reese) + 
+  labs(title="Reese", subtitle = Reese_biasInfo)+
+  theme_bw()
+
+blandr.plot.ggplot(BAstats_McCartney)+ 
+  labs(title="McCartney", subtitle = McCartney_biasInfo)+
+  theme_bw()
+
+
+
+blandr.plot.ggplot(BAstats_Rauschert)+ 
+  labs(title="Rauschert", subtitle = Rauschert_biasInfo)+
+  theme_bw()
+
+###Just a quick check to see if platform makes a difference for this bias 
+forBA_450 = forBA[which(forBA$platform.CB=="450K" & forBA$platform.notCB=="450K"),]
+forBA_EPIC = forBA[which(forBA$platform.CB=="EPIC" & forBA$platform.notCB=="EPIC"),]
+
+BAstats_Reese_450K = blandr.statistics(forBA_450$Reese_CB, forBA_450$Reese_notCB)
+BAstats_Reese_EPIC = blandr.statistics(forBA_EPIC$Reese_CB, forBA_EPIC$Reese_notCB)
+
+BAstats_McCartney_450K = blandr.statistics(forBA_450$McCartney_CB, forBA_450$McCartney_notCB)
+BAstats_McCartney_EPIC = blandr.statistics(forBA_EPIC$McCartney_CB, forBA_EPIC$McCartney_notCB)
+
+Reese_biasInfo_450K = paste0("bias ", round(BAstats_Reese_450K$bias, 2), " (", round(BAstats_Reese_450K$biasLowerCI, 2), ", ", round(BAstats_Reese_450K$biasUpperCI, 2), ")") 
+McCartney_biasInfo_450K = paste0("bias ", round(BAstats_McCartney_450K$bias, 2), " (", round(BAstats_McCartney_450K$biasLowerCI, 2), ", ", round(BAstats_McCartney_450K$biasUpperCI, 2), ")") 
+
+Reese_biasInfo_EPIC = paste0("bias ", round(BAstats_Reese_EPIC$bias, 2), " (", round(BAstats_Reese_EPIC$biasLowerCI, 2), ", ", round(BAstats_Reese_EPIC$biasUpperCI, 2), ")") 
+McCartney_biasInfo_EPIC = paste0("bias ", round(BAstats_McCartney_EPIC$bias, 2), " (", round(BAstats_McCartney_EPIC$biasLowerCI, 2), ", ", round(BAstats_McCartney_EPIC$biasUpperCI, 2), ")") 
+
+#Reese_biasInfo_450K
+#Reese_biasInfo_EPIC
+
+#McCartney_biasInfo_450K
+#McCartney_biasInfo_EPIC
+
+## The biases look like we would expect them.  
+
+biases = read.csv(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/compare3signatureBiases.csv")
+biases$study =  factor(biases$study, levels=c("McCartney", "Reese", "Rauschert"))
+
+biases2 = biases
+biases2$bias = -biases2$bias
+biases2$low = -biases2$low
+biases2$up = -biases2$up
+
+ggplot(biases) +
+    geom_bar( aes(x=study, y=bias), stat="identity", fill=c("#69b3a2", "#404080",  "#D6604D"), color="darkgray", alpha=0.7) +
+    geom_errorbar( aes(x=study, ymin=low, ymax=up), width=0.4, colour="darkgray", alpha=1, size=1)+
+  theme_bw()+
+  ylab("Difference from Birth")+
+  xlab("DNAm Smoking Signature")+
+  theme(axis.title=element_text(size=14,face="bold"), 
+        plot.title = element_text(size=22,face="bold"),
+        axis.text=element_text(size=12))
+
+```
+
+Okay, so this makes sense.  Here we see that Reese is tighter and is looking like what the ICC is telling us.  
+
+Just a quick note on the number of subjects.  This is 179 CB samples and of these, there are 419 other time measures that have a CB sample.  
+
+So in both measures, the scores **decrease** after CB. The differences plotted are cord blood - later measure. This corresponds to what we see in the spaghetti plots as well.
+
+# Subject specific intercepts 
+
+We are using the DNAm smoking signature as a proxy for in-utero exposure to mom smoking.  
+
+**For those with cord blood measurements as well, how does subject specific intercepts for the signature compare to the signature measured at birth?**
+
+## Visualization 
+
+```{r}
+#Get mixed models without scaling so you can compare to original cord blood measures
+McCartney.mixMod.noScaled <- lme(DNAm.smoke.McCartney ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID)
+Reese.mixMod.noScaled <- lme(DNAm.smoke.Reese ~ clinage + platform, data = smoke.wPheno.noTR, random = ~ clinage | ID )
+Rauschert.mixMod.noScaled <- lme(normalized_smokeScore ~ clinage + platform, data=smoke.wPheno2, random = ~clinage | ID)
+
+#Extract the subject specific intercepts and slopes from each model 
+McCartney.random.slope = ranef(McCartney.mixMod.noScaled)[2]
+McCartney.random.intercept = ranef(McCartney.mixMod.noScaled)[1]
+
+Reese.random.slope = ranef(Reese.mixMod.noScaled)[2]
+Reese.random.intercept = ranef(Reese.mixMod.noScaled)[1]
+
+Rauschert.random.slope = ranef(Rauschert.mixMod.noScaled)[2]
+Rauschert.random.intercept = ranef(Rauschert.mixMod.noScaled)[1]
+
+#Put these random intercepts and slopes in a data frame for comparison and analyses 
+dat.subjSummary = data.frame(ID = rownames(Reese.random.slope), McCartney.int = McCartney.random.intercept$`(Intercept)`, McCartney.slope = McCartney.random.slope$clinage, Reese.int = Reese.random.intercept$`(Intercept)`, Reese.slope = Reese.random.slope$clinage, Rauschert.int = Rauschert.random.intercept$`(Intercept)`, Rauschert.slope = Rauschert.random.slope$clinage)
+
+#Merge for comparison with original CB DNAm signature scores;
+dat.CB.vInt = merge(CB.2, dat.subjSummary, by="ID")
+dat.CB.vInt.TRs = dat.CB.vInt[which(dat.CB.vInt$ID %in% dat.CB.vInt$ID[duplicated(dat.CB.vInt$ID)]),]
+dat.CB.vInt2 = dat.CB.vInt[!duplicated(dat.CB.vInt$ID),]
+
+pheno.byID = smoke.wPheno.noTR[,c("ID", "T1Dgroup", "SEX", "IAgroup2", "cohortgrp2", "NHW" , "dr34")]
+pheno.byID = pheno.byID[!duplicated(pheno.byID),]
+dat.CB.vInt2 = merge(dat.CB.vInt2, pheno.byID, by="ID")
+
+pheno.additional = readxl::read_xlsx("C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/dataRaw/additional data.xlsx", sheet="data")
+pheno.additional.ID = pheno.additional[!duplicated(pheno.additional$ID),]
+
+dat.CB.vInt2 = merge(dat.CB.vInt2, pheno.additional.ID[,-c(3,4)], by="ID")
+
+
+
+McCartney.CB.int.cor = cor.test(dat.CB.vInt$McCartney_CB, dat.CB.vInt$McCartney.int)
+McCartney.cor = round(McCartney.CB.int.cor$estimate, 2)
+ggplot(dat.CB.vInt2, aes(x = McCartney_CB, y = McCartney.int, color = pregSMOKE)) +
+  geom_point(alpha=0.7)+
+  scale_color_manual(values=c("black", "red", "gray"))+
+  scale_fill_manual(values=c("black", "red", "gray")) +
+  ylab("Subject Specific Intercept")+
+  xlab("DNAm Signature at Cord Blood")+
+  ggtitle("McCartney", subtitle = paste0("CB and subject specific intercept correlation = ", McCartney.cor))+
+  theme_bw()+
+  theme(legend.position = "bottom")
+
+
+Reese.CB.int.cor = cor.test(dat.CB.vInt$Reese_CB, dat.CB.vInt$Reese.int)
+Reese.cor = round(Reese.CB.int.cor$estimate, 2)
+ggplot(dat.CB.vInt2, aes(x = Reese_CB, y = Reese.int,color = pregSMOKE)) +
+  geom_point(alpha=0.7)+
+  scale_color_manual(values=c("black", "red", "gray"))+
+  scale_fill_manual(values=c("black", "red", "gray")) +
+  ylab("Subject Specific Intercept")+
+  xlab("DNAm Signature at Cord Blood")+
+  ggtitle("Reese", subtitle = paste0("CB and subject specific intercept correlation  = ", Reese.cor))+
+  theme_bw()+
+  theme(legend.position = "bottom")
+
+
+Rauschert.CB.int.cor = cor.test(dat.CB.vInt$Rauschert_CB, dat.CB.vInt$Rauschert.int)
+Rauschert.cor = round(Rauschert.CB.int.cor$estimate, 2)
+ggplot(dat.CB.vInt2, aes(x = Rauschert_CB, y = Rauschert.int, color = pregSMOKE)) +
+  geom_point(alpha=0.7)+
+  scale_color_manual(values=c("black", "red", "gray"))+
+  scale_fill_manual(values=c("black", "red", "gray")) +
+  ylab("Subject Specific Intercept")+
+  xlab("DNAm Signature at Cord Blood")+
+  ggtitle("Rauschert", subtitle = paste0("CB and subject specific intercept correlation  = ", Rauschert.cor))+
+  theme_bw()+
+  theme(legend.position = "bottom")
+
+```
+
+## Table 1 for Anyone with a DNAm Intercept
+
+```{r}
+forAnalysis = merge(pheno.byID, pheno.additional.ID, by="ID")
+forAnalysis = merge(forAnalysis, dat.subjSummary, by="ID")
+forAnalysis$IAgroup2 = factor(forAnalysis$IAgroup2, levels = c("control", "case"))
+
+forAnalysis.T1D = forAnalysis[-which(forAnalysis$T1Dgroup==""),]
+forAnalysis.T1D$T1Dgroup = factor(forAnalysis.T1D$T1Dgroup, levels = c("T1D control", "T1D case"))
+
+table1(~ scale(McCartney.int) + McCartney.int + scale(Reese.int) + Reese.int +  scale(Rauschert.int) + Rauschert.int +  SEX + cohortgrp2 + as.factor(NHW) + as.factor(dr34) + pregSMOKE + as.factor(momsmokeN) + as.factor(dadsmokeN) + smokeallsumN + as.factor(smokeallN) | IAgroup2, data=forAnalysis, overall=FALSE, extra.col=list(`p-value` = pvalue))
+
+table1(~ scale(McCartney.int) + McCartney.int + scale(Reese.int) + Reese.int +  scale(Rauschert.int) + Rauschert.int +  SEX + cohortgrp2 + as.factor(NHW) + as.factor(dr34) + pregSMOKE + as.factor(momsmokeN) + as.factor(dadsmokeN) + smokeallsumN + as.factor(smokeallN) | T1Dgroup, data=forAnalysis.T1D, overall=FALSE, extra.col=list(`p-value` = pvalue))
+
+```
+
+## Association with Environmental Tobacco Smoke
+
+We have a few environmental tobacco smoke (ETS) variables.  Let's take a look at some and how they associate with the subject specific intercepts for DNAm smoking signature:  
+
+1. pregSMOKE: While you were pregnant, did you smoke at least 50 cigarettes? (yes or no)
+
+2. smokeallN: whether mom or dad or child or other smokes (1=yes 0=no)
+
+3. smokeallsumN: composite smoking variable that combined mom/dad/child/other smoking variables (this is an integer ranging from 0-5)
+
+4. momsmokeN: whether mom smokes (1=yes 0=no)
+
+5. dadsmokeN: whether dad smokes (1=yes 0=no)
+
+
+```{r}
+smokeSig <- c("McCartney.int", "Reese.int", "Rauschert.int")
+
+#unadjusted models
+smokeSig = "McCartney.int"
+ETS = "pregSMOKE"
+
+getETSassoc <- function(smokeSig, ETS){
+    tmp <- forAnalysis
+    colnames(tmp)[which(colnames(tmp)==smokeSig)] = "smokeSig"
+    colnames(tmp)[which(colnames(tmp)==ETS)] = "ETS"
+    
+    mod <- lm(scale(smokeSig) ~ ETS, data = tmp)
+    mod.adj <- lm(scale(smokeSig) ~ ETS + SEX, data = tmp)
+    ci = paste0("(", round(confint(mod)[2, 1], 2), ", ", round(confint(mod)[2, 2], 2), ")")
+    ci.adj = paste0("(", round(confint(mod.adj)[2, 1], 2), ", ", round(confint(mod.adj)[2, 2], 2), ")")
+    
+    want = data.frame(smokeSig = smokeSig, ETS = ETS, est = summary(mod)$coefficients[2,1], se = summary(mod)$coefficients[2,2], ci = ci, pval = summary(mod)$coefficients[2,4], est.adj =  summary(mod.adj)$coefficients[2,1], se.adj = summary(mod.adj)$coefficients[2,2], ci.adj = ci.adj, pval.adj = summary(mod.adj)$coefficients[2,4])
+    return(want)
+}
+
+ETS.vars = c("pregSMOKE", "momsmokeN", "dadsmokeN", "smokeallN", "smokeallsumN")
+toTest = data.frame(smokeSig = c(rep("McCartney.int", 5), rep("Reese.int", 5), rep("Rauschert.int", 5)), ETS = rep(ETS.vars, 3))
+
+ETS.assoc <- do.call(rbind, apply(toTest, 1, function(a) getETSassoc(a[1], a[2])))
+ETS.assoc$smokeSig = gsub(".int", "", ETS.assoc$smokeSig, fixed=TRUE) 
+
+forestplot(ETS.assoc, 
+           colour = smokeSig,
+           name=ETS, 
+           estimate = est,
+           se=se,
+          logodds = FALSE,
+          xlab="Beta Estimate") +
+     theme(legend.position="bottom")+
+   # ggtitle("IA Outcome")
+   labs(title = "DNAm Smoking Signature Intercepts & ETS Variables")
+```
+
+# DNAm Signature Intercept Association with IA & T1D 
+
+Lets use the subject-specific intercepts from above and look at the associations with either IA or T1D.  
+
+```
+Outcome (IA or T1D) = DNAm intercept + dr34
+```
+
+```{r}
+forAnalysis$IA_binary = ifelse(forAnalysis$IAgroup2=="case", 1, 0)
+forAnalysis.T1D$T1D_binary = ifelse(forAnalysis.T1D$T1Dgroup=="T1D case", 1,0)
+smokeSig = "Rauschert.int"
+getOutcomeAssoc <- function(smokeSig){
+  #IA first
+  tmp <- forAnalysis
+  colnames(tmp)[which(colnames(tmp)==smokeSig)] = "DNAm"
+  mod.ia <- glm(IA_binary ~ scale(DNAm) + dr34, data = tmp, family = "binomial")
+  ci.ia = paste0("(", round(exp(confint(mod.ia)[2,1]), 2), ", ",  round(exp(confint(mod.ia)[2,2]), 2), ")")  
+  
+  #T1D
+  tmp2 <- forAnalysis.T1D
+  colnames(tmp2)[which(colnames(tmp2)==smokeSig)] = "DNAm"
+  mod.t1d <- glm(T1D_binary ~ scale(DNAm) + dr34, data = tmp2, family = "binomial")
+  ci.t1d = paste0("(", round(exp(confint(mod.t1d)[2,1]), 2), ", ",  round(exp(confint(mod.t1d)[2,2]), 2), ")")  
+
+  #results
+  want = data.frame(smokeSig = smokeSig, outcome =c("IA", "T1D"), beta = c(summary(mod.ia)$coefficients[2,1], summary(mod.t1d)$coefficients[2,1]), OR = round(exp(c(summary(mod.ia)$coefficients[2,1], summary(mod.t1d)$coefficients[2,1])), 2), se = c(summary(mod.ia)$coefficients[2,2], summary(mod.t1d)$coefficients[2,2]), ci = c(ci.ia, ci.t1d), pval = c(summary(mod.ia)$coefficients[2,4], summary(mod.t1d)$coefficients[2,4]))
+  return(want)
+  
+  
+  
+}
+
+smokeSigs = c("McCartney.int", "Reese.int", "Rauschert.int")
+
+intercept.outAssoc <- do.call(rbind, apply(as.matrix(smokeSigs), 1, function(a) getOutcomeAssoc(a)))
+
+
+intercept.outAssoc$smokeSig = gsub(".int", "", intercept.outAssoc$smokeSig, fixed=TRUE) 
+
+forestplot(intercept.outAssoc, 
+           colour = smokeSig,
+           name=outcome, 
+           estimate = beta,
+           se=se,
+          logodds = TRUE,
+          xlab="Odds Ratio") +
+     theme(legend.position="bottom")+
+   # ggtitle("IA Outcome")
+   labs(title = "DNAm Smoking Signature Intercepts & IA or T1D Outcome")
+```
+
+# DNAm Signature Association with IA & T1D Modified by Time 
+
+
+```
+Outcome (IA or T1D) = DNAm*Time + dr34 + (1 | ID)
+```
+
+If we are looking at the interaction term, we are asking if the effect of DNAm smoking signature on the outcome is modified by time.
+
+```{r}
+
+#table(both.smokes2.wP$IAgroup2)
+#table(both.smokes2.wP$T1Dgroup)
+both.smokes2.wP$DNAm.smoke.Rauschert = both.smokes2.wP$normalized_smokeScore
+
+forAnalysis.long.IA = both.smokes2.wP[-which(both.smokes2.wP$IAgroup2==""),]
+forAnalysis.long.T1D = both.smokes2.wP[-which(both.smokes2.wP$T1Dgroup==""),]
+forAnalysis.long.IA$IA_binary = ifelse(forAnalysis.long.IA$IAgroup2=="case",1,0)
+forAnalysis.long.T1D$T1D_binary = ifelse(forAnalysis.long.T1D$T1Dgroup=="T1D case",1,0)
+
+smokeSigs= c("DNAm.smoke.McCartney", "DNAm.smoke.Reese", "DNAm.smoke.Rauschert")
+
+#smokeSig = smokeSigs[1]
+
+getOutcomeLongAssoc <- function(smokeSig){
+  #IA first
+  tmp <- forAnalysis.long.IA
+  colnames(tmp)[which(colnames(tmp)==smokeSig)] = "DNAm"
+  mod.ia <- glmer(IA_binary ~ scale(DNAm)*clinage + dr34 + (1 | ID), data = tmp , family = binomial(link="logit"))
+  
+  #T1D
+  tmp2 <- forAnalysis.long.T1D
+  colnames(tmp2)[which(colnames(tmp2)==smokeSig)] = "DNAm"
+  mod.t1d <- glmer(T1D_binary ~ scale(DNAm)*clinage + dr34 + (1 | ID), data = tmp2 , family = binomial(link="logit"))
+  
+  #results
+  want = data.frame(smokeSig = smokeSig, outcome =c("IA", "T1D"), interaction.pval = c(summary(mod.ia)$coefficients[5,4], summary(mod.t1d)$coefficients[5,4]))
+  return(want)
+}
+
+interaction.outAssoc <- do.call(rbind, apply(as.matrix(smokeSigs), 1, function(a) getOutcomeLongAssoc(a)))
+
+toPrint = interaction.outAssoc
+toPrint$smokeSig = gsub("DNAm.smoke.", "", toPrint$smokeSig, fixed=TRUE)
+toPrint$interaction.pval = round(toPrint$interaction.pval, 3)
+datatable(toPrint, rownames=FALSE)
+```
+
+# DNAm Signature Association with IA & T1D: Mixed Model
+
+```
+Outcome (IA or T1D) = DNAm + Time + dr34 + (1 | ID)
+```
+
+```{r, eval=FALSE}
+smokeSig = "DNAm.smoke.McCartney"
+getOutcomeLongAssoc2 <- function(smokeSig){
+  #IA first
+  tmp <- forAnalysis.long.IA
+  colnames(tmp)[which(colnames(tmp)==smokeSig)] = "DNAm"
+  mod.ia <- glmer(IA_binary ~ scale(DNAm) + clinage + dr34 + (1 | ID), data = tmp , family = binomial(link="logit"))
+  ci.ia <- confint(mod.ia)
+  ci.ia2 <- paste0("(", round(exp(ci.ia[3,1]), 2), ", ", round(exp(ci.ia[3,2]), 2), ")")
+  
+  #T1D
+  tmp2 <- forAnalysis.long.T1D
+  colnames(tmp2)[which(colnames(tmp2)==smokeSig)] = "DNAm"
+  mod.t1d <- glmer(T1D_binary ~ scale(DNAm) + clinage + dr34 + (1 | ID), data = tmp2 , family = binomial(link="logit"))
+   ci.t1d <- confint(mod.t1d)
+  ci.t1d2 <- paste0("(", round(exp(ci.t1d[3,1]), 2), ", ", round(exp(ci.t1d[3,2]), 2), ")")
+  #results
+  want = data.frame(smokeSig = smokeSig, outcome =c("IA", "T1D"), beta = c(summary(mod.ia)$coefficients[2,1], summary(mod.t1d)$coefficients[2,1]), se = c(summary(mod.ia)$coefficients[2,2], summary(mod.t1d)$coefficients[2,2]), ci = c(ci.ia2, ci.t1d2), pval = c(summary(mod.ia)$coefficients[2,4], summary(mod.t1d)$coefficients[2,4]))
+  return(want)
+}
+
+#this takes a LONG TIME.  save results and load back in for figures.  
+long.outAssoc <- do.call(rbind, apply(as.matrix(smokeSigs), 1, function(a) getOutcomeLongAssoc2(a)))
+save(long.outAssoc, file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/results/mixModel_results.Rdata")
+
+```
+```{r}
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/results/mixModel_results.Rdata")
+long.outAssoc$smokeSig = gsub("DNAm.smoke.", "", long.outAssoc$smokeSig, fixed=TRUE) 
+
+forestplot(long.outAssoc, 
+           colour = smokeSig,
+           name=outcome, 
+           estimate = beta,
+           se=se,
+          logodds = TRUE,
+          xlab="Odds Ratio",
+          xlim=c(0.5,2)) +
+#          xlim(0.5, 2)+
+     theme(legend.position="bottom")+
+   # ggtitle("IA Outcome")
+   labs(title = "DNAm Smoking Signature & IA/T1D Outcome from Mixed Logistic")
+help(forestplot)
+```
+
+# Smoke Variables and T1D/IA association 
+
+```{r}
+pregVars = c("pregSmoke", "momsmokeN", "dadsmokeN", "smokeallN", "smokeallsumN")
+
+getSmoke.OutAssoc <- function(smokeVar, outcome){
+  if(outcome=="T1D"){tmp = forAnalysis.T1D
+    tmp$out = tmp[,which(colnames(tmp)=="T1Dgroup")]}else{tmp = forAnalysis
+    tmp$out = tmp[,which(colnames(tmp)=="IAgroup2")]} 
+  
+}
+
+
+```
+

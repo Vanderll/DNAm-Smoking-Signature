@@ -1,0 +1,223 @@
+---
+title: "DNAm Smoking Exposure Signature"
+author: "Lauren Vanderlinden"
+date: "Report generated: `r paste(format(Sys.Date(), '%B %d, %Y'))`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r, include=FALSE}
+rm(list=ls())
+library(kableExtra)
+library(table1)
+library(ggplot2)
+library(DT)
+library(ggpubr)
+
+source("C:/Users/vanderll/Documents/codingExamples/addPvalsToTable1.R")
+```
+
+# Overview
+
+Making 2 different DNAm smoking signatures based on Reese 2017 (https://pubmed.ncbi.nlm.nih.gov/27323799/) and on McCartney 2018 (https://pubmed.ncbi.nlm.nih.gov/30257690/).
+
+Going to create these scores on EVERY SAMPLE that has DNAm.  Then depending on the analyses, folks can subset and/or dichotomize as needed.  Just a reminder in the full datasets we have **687** samples on the 450K and **475** samples on the EPIC.    
+
+```{r, include=FALSE, eval=FALSE}
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/annotation.850K.Rdata")
+```
+
+# Reese
+
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+reese = read.csv(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/dataRaw/Reese_CpG_weights.csv")
+load(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/Reese_McCartney_DNAm_beta_datasets.Rdata")
+
+beta.450.reese.2 = beta.450.reese[which(rownames(beta.450.reese) %in% rownames(beta.EPIC.reese)),]
+
+#table(rownames(beta.450.reese.2) == rownames(beta.EPIC.reese))
+
+reese.want = reese[which(reese$CpG %in% rownames(beta.450.reese.2)),]
+
+#table(rownames(beta.450.reese.2) == reese.want$CpG)
+order = c()
+for(i in 1:nrow(reese.want)){
+  order = c(order, which(reese.want$CpG == rownames(beta.450.reese.2)[i]))
+}
+reese.want = reese.want[order,]
+#table(rownames(beta.450.reese.2) == reese.want$CpG)
+
+DNAm.smoke.reese = as.numeric(t(as.matrix(reese.want$Coefficient)) %*% beta.450.reese.2) 
+DNAm.smoke.reese = data.frame(array = colnames(beta.450.reese.2), DNAm.smoke.reese, platform="450K")
+
+DNAm.smoke.reese.epic = as.numeric(t(as.matrix(reese.want$Coefficient)) %*% beta.EPIC.reese) 
+DNAm.smoke.reese.epic = data.frame(array = colnames(beta.EPIC.reese), DNAm.smoke.reese.epic, platform="EPIC")
+
+colnames(DNAm.smoke.reese) = c("array", "DNAm.smoke.Reese", "platform")
+colnames(DNAm.smoke.reese.epic) = c("array", "DNAm.smoke.Reese", "platform")
+
+DNAm.smoke.reese = rbind(DNAm.smoke.reese, DNAm.smoke.reese.epic)
+
+reese.want = merge(reese.want, anno[,c(1,2,3)], by.x="CpG", by.y=0, all.x=TRUE)
+write.csv(reese.want, file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/forStudent/Reese.finalList4signature.csv")
+```
+
+Reese reports **`r nrow(reese)` CpGs** for their signature.  Of these **21** are present and high quality on both our 450K and EPIC arrays.  Going to create score off of these 21 CpG probes.  These probes are `r paste(reese.want$CpG, collapse=", ")`.  
+
+What are we missing?
+
+```{r}
+toPlot.score = data.frame(table(c(reese$CpG, reese.want$CpG)))
+colnames(toPlot.score) = c("CpG", "n")
+
+toPlot.score$InCalc = as.numeric(toPlot.score$n==2)
+
+toPlot.score = merge(toPlot.score, reese, by="CpG")
+toPlot.score = toPlot.score[order(abs(toPlot.score$Coefficient), decreasing=T),]
+
+datatable(toPlot.score[,-2], rownames=FALSE)
+#kable(toPlot.score[,-2], row.names=0, align='l')  %>%
+ # kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+Let's look at the distribution of the scores.
+
+```{r, fig.width=8, fig.height=5}
+d = ggplot(DNAm.smoke.reese, aes(x=DNAm.smoke.Reese, colour=platform, fill=platform)) + #geom_histogram(alpha=0.5, bins=50) +
+   geom_density(alpha=0.4)+ 
+  scale_color_manual(values=c("blue", "black"))+  scale_fill_manual(values=c("blue", "black")) +
+  xlab("Reese DNAm Smoking Signature Score") + ylab("Density") + 
+  theme_bw(base_size=12) +
+  ggtitle("Reese Score (Density Plot)")+ theme(legend.position="bottom")
+
+a = ggplot(DNAm.smoke.reese, aes(x=DNAm.smoke.Reese, colour=platform, fill=platform)) + geom_histogram(alpha=0.4, bins=50) +
+   #geom_density(alpha=0.4)+ 
+  scale_color_manual(values=c("blue", "black"))+  scale_fill_manual(values=c("blue", "black")) +
+  xlab("Reese DNAm Smoking Signature Score") + ylab("Density") + 
+  theme_bw(base_size=12) +
+  ggtitle("Reese Score (Histogram)")+ theme(legend.position="bottom")
+ggarrange(d, a, ncol=2)
+
+
+reese.summary = tapply(DNAm.smoke.reese$DNAm.smoke.Reese, DNAm.smoke.reese$platform, summary)
+toPrint = data.frame(measure = names(reese.summary[[2]]), p450K = round(as.numeric(reese.summary[[1]]),2), EPIC=round(as.numeric(reese.summary[[2]]),2))
+colnames(toPrint) = c("Summary Measure", "450K", "EPIC")
+
+kable(toPrint, row.names=0, align='l')  %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F) 
+```
+
+
+# McCartney 
+
+```{r, warning=FALSE, error=FALSE, message=FALSE}
+mccartney = read.csv(file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/dataRaw/McCartney_CpG_weights.csv")
+
+test = data.frame(table(c(rownames(beta.450.mccartney), rownames(beta.EPIC.mccartney))))
+cpg.want = test$Var1[which(test$Freq==2)]
+
+beta.450.mccartney.2 = beta.450.mccartney[which(rownames(beta.450.mccartney) %in% cpg.want),]
+beta.EPIC.mccartney.2 = beta.EPIC.mccartney[which(rownames(beta.EPIC.mccartney) %in% cpg.want),]
+
+table(rownames(beta.450.mccartney.2) == rownames(beta.EPIC.mccartney.2))
+
+mccartney.want = mccartney[which(mccartney$CpG %in% rownames(beta.450.mccartney.2)),]
+
+mccartney.want = mccartney[which(mccartney$CpG %in% cpg.want),]
+#table(rownames(beta.450.mccartney.2) == mccartney.want$CpG)
+
+order = c()
+for(i in 1:nrow(mccartney.want)){
+  order = c(order, which(mccartney.want$CpG == rownames(beta.450.mccartney.2)[i]))
+}
+mccartney.want = mccartney.want[order,]
+#table(rownames(beta.450.mccartney.2) == mccartney.want$CpG)
+
+DNAm.smoke.mccartney = as.numeric(t(as.matrix(mccartney.want$Beta)) %*% beta.450.mccartney.2) 
+DNAm.smoke.mccartney = data.frame(array = colnames(beta.450.mccartney.2), DNAm.smoke.mccartney, platform="450K")
+
+DNAm.smoke.mccartney.epic = as.numeric(t(as.matrix(mccartney.want$Beta)) %*% beta.EPIC.mccartney.2) 
+DNAm.smoke.mccartney.epic = data.frame(array = colnames(beta.EPIC.mccartney.2), DNAm.smoke.mccartney.epic, platform="EPIC")
+
+colnames(DNAm.smoke.mccartney) = c("array", "DNAm.smoke.McCartney", "platform")
+colnames(DNAm.smoke.mccartney.epic) = c("array", "DNAm.smoke.McCartney", "platform")
+
+DNAm.smoke.mccartney = rbind(DNAm.smoke.mccartney, DNAm.smoke.mccartney.epic)
+
+mccartney.want = merge(mccartney.want, anno[,c(1,2,3, 22)], by.x="CpG", by.y=0, all.x=TRUE)
+write.csv(mccartney.want, file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/forStudent/McCartney.finalList4signature.csv")
+```
+
+
+McCartney reports **`r nrow(mccartney)` CpGs** for their signature.  Of these **170** are present and high quality on both our 450K and EPIC arrays.  Going to create score off of these 170 CpG probes.    
+
+What are we missing?
+
+
+```{r}
+toPlot.score = data.frame(table(c(mccartney$CpG, mccartney.want$CpG)))
+colnames(toPlot.score) = c("CpG", "n")
+
+toPlot.score$InCalc = as.numeric(toPlot.score$n==2)
+
+toPlot.score = merge(toPlot.score, mccartney, by="CpG")
+toPlot.score = toPlot.score[order(abs(toPlot.score$Beta), decreasing=T),]
+
+datatable(toPlot.score[,-2], rownames=FALSE)
+#kable(toPlot.score[,-2], row.names=0, align='l')  %>%
+ # kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+Let's look at the distribution of the scores.
+```{r, fig.width=8, fig.height=5}
+d = ggplot(DNAm.smoke.mccartney, aes(x=DNAm.smoke.McCartney, colour=platform, fill=platform)) + #geom_histogram(alpha=0.5, bins=50) +
+   geom_density(alpha=0.4)+ 
+  scale_color_manual(values=c("blue", "black"))+  scale_fill_manual(values=c("blue", "black")) +
+  xlab("McCartney DNAm Smoking Signature Score") + ylab("Density") + 
+  theme_bw(base_size=12) +
+  ggtitle("McCartney Score (Density Plot)")+ theme(legend.position="bottom")
+
+a = ggplot(DNAm.smoke.mccartney, aes(x=DNAm.smoke.McCartney, colour=platform, fill=platform)) + geom_histogram(alpha=0.4, bins=50) +
+   #geom_density(alpha=0.4)+ 
+  scale_color_manual(values=c("blue", "black"))+  scale_fill_manual(values=c("blue", "black")) +
+  xlab("McCartney DNAm Smoking Signature Score") + ylab("Density") + 
+  theme_bw(base_size=12) +
+  ggtitle("McCartney Score (Histogram)")+ theme(legend.position="bottom")
+ggarrange(d, a, ncol=2)
+
+mccartney.summary = tapply(DNAm.smoke.mccartney$DNAm.smoke.McCartney, DNAm.smoke.mccartney$platform, summary)
+toPrint = data.frame(measure = names(mccartney.summary[[2]]), p450K = round(as.numeric(mccartney.summary[[1]]),2), EPIC=round(as.numeric(mccartney.summary[[2]]),2))
+colnames(toPrint) = c("Summary Measure", "450K", "EPIC")
+
+kable(toPrint, row.names=0, align='l')  %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F) 
+```
+
+# Comparison Of Scores
+
+```{r, fig.width=8, fig.height=5}
+both.smokes = merge(DNAm.smoke.mccartney, DNAm.smoke.reese, by=c("array", "platform"))
+
+ggplot(both.smokes, aes(x = DNAm.smoke.Reese, y = DNAm.smoke.McCartney, color = platform)) +
+  geom_point(alpha=0.7)+
+  scale_color_manual(values=c("blue", "black"))+
+  scale_fill_manual(values=c("blue", "black")) +
+  #geom_smooth(method = "lm", se = FALSE) +
+  theme_bw()
+
+cor.both = cor.test(x=both.smokes$DNAm.smoke.Reese, y = both.smokes$DNAm.smoke.McCartney)
+cor.450 = cor.test(x=both.smokes$DNAm.smoke.Reese[which(both.smokes$platform=="450K")], y = both.smokes$DNAm.smoke.McCartney[which(both.smokes$platform=="450K")])
+cor.EPIC = cor.test(x=both.smokes$DNAm.smoke.Reese[which(both.smokes$platform=="EPIC")], y = both.smokes$DNAm.smoke.McCartney[which(both.smokes$platform=="EPIC")])
+
+toPrint = data.frame(data = c("Both Platforms", "450K", "EPIC"), correlation = round(c(cor.both$estimate, cor.450$estimate, cor.EPIC$estimate), 3), pvalue = formatC(c(cor.both$p.value, cor.450$p.value, cor.EPIC$p.value), format="e", digits=2))
+colnames(toPrint) = c("Data", "Correlation Coefficient", "p-value")
+
+kable(toPrint, row.names=0, align='l')  %>%
+ kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+save(both.smokes, file="C:/Users/vanderll/Documents/Norris/smokingExposure_DNAmSignature/data/bothSmokingSignatures.Rdata")
+```
+
